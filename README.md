@@ -2,7 +2,7 @@
 
 An image of what this might become:
 
-https://www.lucidchart.com/invitations/accept/efa4a2b5-41d0-474b-9f6a-7542f1aa8f9a
+https://www.lucidchart.com/invitations/accept/c70dddba-f51d-4e64-95ac-775d6f6b554a
 
 ## Usage
 
