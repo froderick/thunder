@@ -1,8 +1,7 @@
 #include <IOKit/hid/IOHIDValue.h>
 #include <IOKit/hid/IOHIDManager.h>
-#include <pthread.h>
 
-void myHIDKeyboardCallback( void* context,  IOReturn result,  void* sender,  IOHIDValueRef value ) {
+void controllerInputCallback( void* context,  IOReturn result,  void* sender,  IOHIDValueRef value ) {
 
   IOHIDElementRef element = IOHIDValueGetElement(value);
   IOHIDElementCookie cookie = IOHIDElementGetCookie(element);
@@ -53,17 +52,14 @@ int kHidUsageGamepad = kHIDUsage_GD_GamePad;
 int kHidUsageJoystick = kHIDUsage_GD_Joystick;
 int kHidUsageController = kHIDUsage_GD_MultiAxisController;
 
-static void attach_callback(void *context, IOReturn r, void *hidManager, IOHIDDeviceRef device)
+static void attachCallback(void *context, IOReturn r, void *hidManager, IOHIDDeviceRef device)
 {
   IOHIDDeviceOpen(device, kIOHIDOptionsTypeNone);
-  IOHIDDeviceRegisterInputValueCallback(device, myHIDKeyboardCallback, NULL);
+  IOHIDDeviceRegisterInputValueCallback(device, controllerInputCallback, NULL);
   IOHIDDeviceScheduleWithRunLoop(device, CFRunLoopGetMain(), kCFRunLoopDefaultMode);
 }
 
-int main(void)
-{
-
-//  printf("{\"hi\": \"there\", \"state\": \"what\"}\n");
+int main(void) {
 
   IOHIDManagerRef hidManager = IOHIDManagerCreate( kCFAllocatorDefault, kIOHIDOptionsTypeNone );
 
@@ -98,7 +94,7 @@ int main(void)
   CFRelease(dictionaries[2]);
 
   IOHIDManagerSetDeviceMatchingMultiple(hidManager, dictionariesRef);
-  IOHIDManagerRegisterDeviceMatchingCallback(hidManager, attach_callback, NULL);
+  IOHIDManagerRegisterDeviceMatchingCallback(hidManager, attachCallback, NULL);
   IOHIDManagerScheduleWithRunLoop( hidManager, CFRunLoopGetMain(), kCFRunLoopDefaultMode );
   IOHIDManagerOpen( hidManager, kIOHIDOptionsTypeNone );
   IOHIDManagerScheduleWithRunLoop(hidManager, CFRunLoopGetCurrent(), CFSTR("RunLoopModeDiscovery"));
