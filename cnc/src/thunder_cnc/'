@@ -1,0 +1,34 @@
+(ns thunder-cnc.core
+  (:require [cheshire.core :as json]
+            [ring.adapter.jetty :as jetty]))
+
+(def command-buffer (atom []))
+
+(defn await-change [r timeout-ms]
+  (let [p (promise)]
+    (try
+      (add-watch r :await-change ;; keyword must be unique per ref!
+                 (fn [_ _ old new]
+                   (when-not (= old new) (deliver p :changed))))
+      (deref p timeout-ms :timed-out)
+      (finally
+        (remove-watch r :await-change)))))
+
+(defn handler [request]
+
+  (if (zero? (count @command-buffer))
+    )
+
+  (swap! command-buffer )
+
+  {:status 200
+   :headers {"Content-Type" "application/json"}
+   :body (json/generate-string {:foo "It costs £100"})})
+
+(comment
+
+  (future
+    (use 'ring.adapter.jetty)
+    (jetty/run-jetty handler {:port 3000}))
+
+  )
