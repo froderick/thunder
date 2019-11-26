@@ -2,7 +2,7 @@
 
 An image of what this might become:
 
-https://www.lucidchart.com/documents/edit/e6b09b75-3998-4206-8caa-7c4b6ea134c8/0_0?shared=true
+https://www.lucidchart.com/documents/view/e6b09b75-3998-4206-8caa-7c4b6ea134c8#
 
 ## Usage
 
