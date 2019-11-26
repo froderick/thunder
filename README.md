@@ -2,9 +2,7 @@
 
 An image of what this might become:
 
-https://www.lucidchart.com/documents/edit/e6b09b75-3998-4206-8caa-7c4b6ea134c8/0_0
-
-<div style="width: 640px; height: 480px; margin: 10px; position: relative;"><iframe allowfullscreen frameborder="0" style="width:640px; height:480px" src="https://www.lucidchart.com/documents/embeddedchart/e6b09b75-3998-4206-8caa-7c4b6ea134c8" id="s~B~ZTjlZcUu"></iframe></div>
+https://www.lucidchart.com/invitations/accept/efa4a2b5-41d0-474b-9f6a-7542f1aa8f9a
 
 ## Usage
 
