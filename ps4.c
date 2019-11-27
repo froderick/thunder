@@ -9,38 +9,38 @@ void controllerInputCallback( void* context,  IOReturn result,  void* sender,  I
 
   if (cookie == 2) { // square
     if (int_value == 1) {
-      printf("{\"control\": \"led-toggle\", \"state\": \"down\"}\n");
+      printf("{\"control\": \"led-toggle\", \"value\": \"down\"}\n");
     }
     else {
-      printf("{\"control\": \"led-toggle\", \"state\": \"up\"}\n");
+      printf("{\"control\": \"led-toggle\", \"value\": \"up\"}\n");
     }
     fflush(stdout);
   }
   else if (cookie == 3) { // X
     if (int_value == 1) {
-      printf("{\"control\": \"fire\", \"state\": \"down\"}\n");
+      printf("{\"control\": \"fire\", \"value\": \"down\"}\n");
     }
     else {
-      printf("{\"control\": \"fire\", \"state\": \"up\"}\n");
+      printf("{\"control\": \"fire\", \"value\": \"up\"}\n");
     }
     fflush(stdout);
   }
   else if (cookie == 20) { // d-pad
     switch (int_value) {
       case 0:
-        printf("{\"control\": \"direction\", \"state\": \"up\"}\n");
+        printf("{\"control\": \"direction\", \"value\": \"up\"}\n");
         break;
       case 4:
-        printf("{\"control\": \"direction\", \"state\": \"down\"}\n");
+        printf("{\"control\": \"direction\", \"value\": \"down\"}\n");
         break;
       case 6:
-        printf("{\"control\": \"direction\", \"state\": \"left\"}\n");
+        printf("{\"control\": \"direction\", \"value\": \"left\"}\n");
         break;
       case 2:
-        printf("{\"control\": \"direction\", \"state\": \"right\"}\n");
+        printf("{\"control\": \"direction\", \"value\": \"right\"}\n");
         break;
       case 8:
-        printf("{\"control\": \"direction\", \"state\": \"none\"}\n");
+        printf("{\"control\": \"direction\", \"value\": \"none\"}\n");
         break;
     }
     fflush(stdout);
