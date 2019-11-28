@@ -6,20 +6,64 @@
             [ring.adapter.jetty :as jetty]
             [compojure.core :refer :all]))
 
+;; the first step of every command is to clear the previous actions
+(defn clear-commands
+  [state]
+  (assoc state :thunder-commands []))
+
+;; commands
+
 (defn led-timer-action
   [{:keys [led-mode] :as state}]
-  (if (= led-mode :blink)
-    (let [blink-state (case (:led-blink-state state)
-                        nil :off
-                        :on :off
-                        :off :on)
-          cmd (case blink-state
-                :on "ledon"
-                :off "ledoff")]
-          (assoc state
-                 :led-blink-state blink-state
-                 :thunder-commands [cmd]))
+  (let [state (clear-commands state)]
+
+    (if (= led-mode :blink)
+      (let [blink-state (case (:led-blink-state state)
+                          nil :off
+                          :on :off
+                          :off :on)
+            cmd (case blink-state
+                  :on "ledon"
+                  :off "ledoff")]
+        (assoc state
+               :led-blink-state blink-state
+               :thunder-commands [cmd]))
+      state)))
+
+(defn calc-next-led-mode
+  [current]
+  (let [modes [:off :on :blink]
+        idx (inc (.indexOf modes current))
+        idx (if (= idx (count modes)) 0 idx)]
+    (get modes idx)))
+
+(defn toggle-led-mode
+  [state value]
+  (if (= value "down")
+    (let [{:keys [led-mode] :as state } (update state :led-mode calc-next-led-mode)
+          state (if (#{:on :off} led-mode)
+                  (assoc state :thunder-commands [(case led-mode
+                                                    :on "ledon"
+                                                    :off "ledoff")])
+                  state)]
+      (println "toggled led-mode: " led-mode)
+      state)
     state))
+
+(defn manual-api-action
+  [state {:keys [control value] :as cmd}]
+  (let [state (clear-commands state)]
+    (cond
+
+      (= control "led-toggle")
+      (toggle-led-mode state value)
+
+      :else
+      (do
+        (println "unknown manual command: " cmd)
+        state))))
+
+;; state init
 
 (def led-blink-delay-ms 100)
 (def led-blink-period-ms 200)
@@ -36,49 +80,37 @@
               led-blink-delay-ms
               led-blink-period-ms
               java.util.concurrent.TimeUnit/MILLISECONDS)]
-    (assoc state :led-blink-task task)))
+    (assoc state
+           :led-blink-task task
+           :thunder-commands [])))
 
 (defn cnc-init-state
   []
   (let [executor (java.util.concurrent.ScheduledThreadPoolExecutor. 4)
+        queue (java.util.concurrent.LinkedBlockingQueue. 1024)
         base-state {:executor executor
                     :led-mode :off       ;; (:off :on :blink)
                     :fire-control :off   ;; (:off :on)
                     :move-control :off   ;; (:off :up :down :left :right)
-                    :thunder-commands [] ;; commands queued to be delivered via watch
-                    }
+                    :thunder-commands [] ;; each action clears and sets this, watch picks it up and queues it
+                    :thunder-queue queue}
         a (agent base-state)]
+
+    (add-watch a :action-watch ;; keyword must be unique per ref!
+               (fn [_ _ old new]
+                 (let [cmds (:thunder-commands new)]
+                   (when-not (empty? cmds)
+                     (.offer queue (:thunder-commands new))))))
+
     (send a led-init-timer-action a)))
 
-(defn calc-next-led-mode
-  [current]
-  (let [modes [:off :on :blink]
-        idx (inc (.indexOf modes current))
-        idx (if (= idx (count modes)) 0 idx)]
-    (get modes idx)))
-
-(defn toggle-led-mode
-  [state value]
-  (cond 
-    (= value "down")
-    (let [state (update state :led-mode calc-next-led-mode)]
-      (println "toggled led-mode: " (:led-mode state))
-      state)
-    :else state))
-
-(defn manual-api-action
-  [state {:keys [control value] :as cmd}]
-  (cond
-
-    (and (= control "led-toggle"))
-    (toggle-led-mode state value)
-
-    :else
-    (do
-      (println "unknown manual command: " cmd)
-      state)))
-
 (def cnc-state (cnc-init-state))
+
+;; TODO: just make the polling cycle line up with the timeouts
+;; TODO: disable idle timeouts until it starts working
+;; TODO: make a heart-beat so it keeps working
+;; TODO: reload properly, shutting down the state and recreating it
+
     
 ;; manual control api ;;;;;;;;;;;;;;;;;
 
@@ -91,11 +123,30 @@
         r (io/reader input)
         s (line-seq r)]
     (doseq [l s]
-      (send-off cnc-state manual-api-action (json/parse-string l true))))
+      (send cnc-state manual-api-action (json/parse-string l true))))
   (response/response "ok"))
 
+;; thunder command api
+
+(defn thunder-response-streamer
+  [queue]
+  (reify ring-proto/StreamableResponseBody
+    (write-body-to-stream [body response output-stream]
+      (println "stream begin");
+      (with-open [w (io/writer output-stream)]
+        (loop []
+          (doseq [cmd (.take queue)]
+            (.write w (str cmd "\n"));
+            (.flush w))
+          (recur))))))
+
+(defn thunder-api-handler [request]
+  (let [queue (-> @cnc-state :thunder-queue)]
+    (response/response (thunder-response-streamer queue))))
+
 (defroutes myapp
-  (POST "/manual" [] manual-api-handler))
+  (POST "/manual" [] manual-api-handler)
+  (GET "/thunder" [] thunder-api-handler))
 
 (comment
 
@@ -115,9 +166,9 @@
   )
 
 
+;; while true; do ./ps4 | curl --trace-ascii - -H "Transfer-Encoding: chunked" -H "Content-Type: application/json" -X POST -T -  http://localhost:3000/manual; done
 
-
-
+;; while true; do curl http://localhost:3000/thunder | ./thunder; done
 
 
 
