@@ -30,6 +30,12 @@
                :thunder-commands [cmd]))
       state)))
 
+(defn thunder-heartbeat-timer-action
+  [state]
+  (-> state
+      clear-commands
+      (assoc :thunder-commands ["heartbeat"])))
+
 (defn calc-next-led-mode
   [current]
   (let [modes [:off :on :blink]
@@ -84,6 +90,25 @@
            :led-blink-task task
            :thunder-commands [])))
 
+(def thunder-heartbeat-delay-ms 100)
+(def thunder-heartbeat-period-ms 20000)
+
+(defn thunder-heartbeat-init-timer-action
+  [{:keys [executor] :as state} a]
+  (let [task (.scheduleAtFixedRate
+              executor
+              (fn []
+                (try
+                  (send a thunder-heartbeat-timer-action)
+                  (catch Exception e
+                    (.printStackTrace e))))
+              thunder-heartbeat-delay-ms
+              thunder-heartbeat-period-ms
+              java.util.concurrent.TimeUnit/MILLISECONDS)]
+    (-> state
+        clear-commands
+        (assoc :thunder-heartbeat-task task))))
+
 (defn cnc-init-state
   []
   (let [executor (java.util.concurrent.ScheduledThreadPoolExecutor. 4)
@@ -102,7 +127,8 @@
                    (when-not (empty? cmds)
                      (.offer queue (:thunder-commands new))))))
 
-    (send a led-init-timer-action a)))
+    (send a led-init-timer-action a)
+    (send a thunder-heartbeat-init-timer-action a)))
 
 (def cnc-state (cnc-init-state))
 
