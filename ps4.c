@@ -1,5 +1,24 @@
 #include <IOKit/hid/IOHIDValue.h>
 #include <IOKit/hid/IOHIDManager.h>
+#include <dispatch/dispatch.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+
+pthread_mutex_t mutex;
+
+void sendControl(char* value) {
+  pthread_mutex_lock(&mutex);
+
+  printf("%s\n", value);
+  fflush(stdout);
+
+  pthread_mutex_unlock(&mutex);
+}
+
+void sendHeartbeat() {
+  sendControl("{\"heartbeat\": \"none\"}");
+}
 
 void controllerInputCallback( void* context,  IOReturn result,  void* sender,  IOHIDValueRef value ) {
 
@@ -9,38 +28,36 @@ void controllerInputCallback( void* context,  IOReturn result,  void* sender,  I
 
   if (cookie == 2) { // square
     if (int_value == 1) {
-      printf("{\"control\": \"led-toggle\", \"value\": \"down\"}\n");
+      sendControl("{\"control\": \"led-toggle\", \"value\": \"down\"}");
     }
     else {
-      printf("{\"control\": \"led-toggle\", \"value\": \"up\"}\n");
+      sendControl("{\"control\": \"led-toggle\", \"value\": \"up\"}");
     }
-    fflush(stdout);
   }
   else if (cookie == 3) { // X
     if (int_value == 1) {
-      printf("{\"control\": \"fire\", \"value\": \"down\"}\n");
+      sendControl("{\"control\": \"fire\", \"value\": \"down\"}");
     }
     else {
-      printf("{\"control\": \"fire\", \"value\": \"up\"}\n");
+      sendControl("{\"control\": \"fire\", \"value\": \"up\"}");
     }
-    fflush(stdout);
   }
   else if (cookie == 20) { // d-pad
     switch (int_value) {
       case 0:
-        printf("{\"control\": \"direction\", \"value\": \"up\"}\n");
+        sendControl("{\"control\": \"direction\", \"value\": \"up\"}");
         break;
       case 4:
-        printf("{\"control\": \"direction\", \"value\": \"down\"}\n");
+        sendControl("{\"control\": \"direction\", \"value\": \"down\"}");
         break;
       case 6:
-        printf("{\"control\": \"direction\", \"value\": \"left\"}\n");
+        sendControl("{\"control\": \"direction\", \"value\": \"left\"}");
         break;
       case 2:
-        printf("{\"control\": \"direction\", \"value\": \"right\"}\n");
+        sendControl("{\"control\": \"direction\", \"value\": \"right\"}");
         break;
       case 8:
-        printf("{\"control\": \"direction\", \"value\": \"none\"}\n");
+        sendControl("{\"control\": \"direction\", \"value\": \"none\"}");
         break;
     }
     fflush(stdout);
@@ -60,6 +77,20 @@ static void attachCallback(void *context, IOReturn r, void *hidManager, IOHIDDev
 }
 
 int main(void) {
+
+  pthread_mutex_init(&mutex, NULL);
+
+  // schedule hearbeat
+  {
+    // https://stackoverflow.com/questions/44807302/create-c-timer-in-macos/52905687#52905687
+    dispatch_queue_t queue = dispatch_queue_create("timerQueue", 0);
+    dispatch_source_t timer = dispatch_source_create(DISPATCH_SOURCE_TYPE_TIMER, 0, 0, queue);
+    dispatch_source_set_event_handler(timer, ^{ sendHeartbeat(); });
+
+    dispatch_time_t start = dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC * 5); // 20 seconds
+    dispatch_source_set_timer(timer, start, NSEC_PER_SEC * 20, 0);  // 20 seconds
+    dispatch_resume(timer);
+  }
 
   IOHIDManagerRef hidManager = IOHIDManagerCreate( kCFAllocatorDefault, kIOHIDOptionsTypeNone );
 
