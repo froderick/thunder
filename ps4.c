@@ -7,17 +7,18 @@
 
 pthread_mutex_t mutex;
 
-void sendControl(char* value) {
+void sendHeartbeat() {
   pthread_mutex_lock(&mutex);
-
-  printf("%s\n", value);
+  printf("{\"type\": \"heartbeat\"}\n");
   fflush(stdout);
-
   pthread_mutex_unlock(&mutex);
 }
 
-void sendHeartbeat() {
-  sendControl("{\"heartbeat\": \"none\"}");
+void sendControl(char *name, char *value) {
+  pthread_mutex_lock(&mutex);
+  printf("{\"type\": \"control\",  \"name\": \"%s\", \"value\": \"%s\"}", name, value);
+  fflush(stdout);
+  pthread_mutex_unlock(&mutex);
 }
 
 void controllerInputCallback( void* context,  IOReturn result,  void* sender,  IOHIDValueRef value ) {
@@ -28,36 +29,36 @@ void controllerInputCallback( void* context,  IOReturn result,  void* sender,  I
 
   if (cookie == 2) { // square
     if (int_value == 1) {
-      sendControl("{\"control\": \"led-toggle\", \"value\": \"down\"}");
+      sendControl("led-toggle", "down");
     }
     else {
-      sendControl("{\"control\": \"led-toggle\", \"value\": \"up\"}");
+      sendControl("led-toggle", "up");
     }
   }
   else if (cookie == 3) { // X
     if (int_value == 1) {
-      sendControl("{\"control\": \"fire\", \"value\": \"down\"}");
+      sendControl("fire", "down");
     }
     else {
-      sendControl("{\"control\": \"fire\", \"value\": \"up\"}");
+      sendControl("fire", "up");
     }
   }
   else if (cookie == 20) { // d-pad
     switch (int_value) {
       case 0:
-        sendControl("{\"control\": \"direction\", \"value\": \"up\"}");
+        sendControl("direction", "up");
         break;
       case 4:
-        sendControl("{\"control\": \"direction\", \"value\": \"down\"}");
+        sendControl("direction", "down");
         break;
       case 6:
-        sendControl("{\"control\": \"direction\", \"value\": \"left\"}");
+        sendControl("direction", "left");
         break;
       case 2:
-        sendControl("{\"control\": \"direction\", \"value\": \"right\"}");
+        sendControl("direction", "right");
         break;
       case 8:
-        sendControl("{\"control\": \"direction\", \"value\": \"none\"}");
+        sendControl("direction", "none");
         break;
     }
     fflush(stdout);
