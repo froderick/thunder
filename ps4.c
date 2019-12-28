@@ -16,7 +16,7 @@ void sendHeartbeat() {
 
 void sendControl(char *name, char *value) {
   pthread_mutex_lock(&mutex);
-  printf("{\"type\": \"control\",  \"name\": \"%s\", \"value\": \"%s\"}", name, value);
+  printf("{\"type\": \"control\",  \"name\": \"%s\", \"value\": \"%s\"}\n", name, value);
   fflush(stdout);
   pthread_mutex_unlock(&mutex);
 }
