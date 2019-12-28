@@ -6,6 +6,39 @@
             [ring.adapter.jetty :as jetty]
             [compojure.core :refer :all]))
 
+;; One thing to think about is how this fits into ports and adapters. The subscribe
+;; and then later notify pattern is one that should operate independently of the
+;; actual protocols.
+;;
+;; 1. register a new thunder device. 
+;; 
+;;   - it must have an api key that cnc recognizes (authorization)
+;;     that key represents a unique device. that device can then
+;;     connect its launcher and camera to the cnc system.
+;;
+;;   - the launcher listens to its own dedicated command queue, if it
+;;     is not connected while commands are issued, those commands are
+;;     never execurted. it is presumed that commands that cannot be
+;;     delivered to the launcher quickly are too out of date to be
+;;     executed at all.
+;;
+;;   - the device also connects its video stream. this could be a feed of mkv/h264
+;;     frames captured directly from the device
+;;
+;;   - where does the state live on the server side?
+;;     - the device configs live in dynamo, reloaded perioodically
+;;     - the kinesis streams and infra associated with the devices are part of the device configs, dynamically created
+;;     - the internal representation of the device state lives in redis? or dynamo
+;;     - the thunder heartbeat timer lives in the container where the request terminates
+;;     - the led timer lives where? a distributed scheduler? it is latency-sensitive soo...
+;;
+;;   - each cnc-side rep of the device is allowed these two http connections, which
+;;
+;; 2. 
+
+;;
+;; the api servers are also the router processes, we can dispatch from http to zmq internally, and then from there it is all zmq
+
 ;; the first step of every command is to clear the previous actions
 (defn clear-commands
   [state]
@@ -57,11 +90,16 @@
     state))
 
 (defn manual-api-action
-  [state {:keys [control value] :as cmd}]
+  [state {:keys [type name value] :as cmd}]
   (let [state (clear-commands state)]
     (cond
 
-      (= control "led-toggle")
+      (= type "heartbeat")
+      (do
+        (println "heartbeat received")
+        state)
+
+      (and (= type "control") (= name "led-toggle"))
       (toggle-led-mode state value)
 
       :else
@@ -128,13 +166,10 @@
                      (.offer queue (:thunder-commands new))))))
 
     (send a led-init-timer-action a)
-    (send a thunder-heartbeat-init-timer-action a)))
+    #_(send a thunder-heartbeat-init-timer-action a)))
 
 (def cnc-state (cnc-init-state))
 
-;; TODO: just make the polling cycle line up with the timeouts
-;; TODO: disable idle timeouts until it starts working
-;; TODO: make a heart-beat so it keeps working
 ;; TODO: reload properly, shutting down the state and recreating it
 
     
@@ -162,6 +197,7 @@
       (with-open [w (io/writer output-stream)]
         (loop []
           (doseq [cmd (.take queue)]
+            (println "sending cmd: " cmd)
             (.write w (str cmd "\n"));
             (.flush w))
           (recur))))))
@@ -189,7 +225,7 @@
 
   @command-buffer
 
-  )
+  (-> @cnc-state :thunder-heartbeat-task (.cancel true))
 
 
 ;; while true; do ./ps4 | curl --trace-ascii - -H "Transfer-Encoding: chunked" -H "Content-Type: application/json" -X POST -T -  http://localhost:3000/manual; done
@@ -197,129 +233,3 @@
 ;; while true; do curl http://localhost:3000/thunder | ./thunder; done
 
 
-
-
-
-
-
-
-
-
-;   (comment 
-;     (->> (iterate led-timer-action @cnc-state)
-;          (map :led-blink-state)
-;          (take 10)))
-; 
-; 
-; 
-; 
-; 
-; (def command-buffer (atom []))
-; 
-; (defn await-change [r timeout-ms]
-;   (let [p (promise)]
-;     (try
-;       (add-watch r :await-change ;; keyword must be unique per ref!
-;                  (fn [_ _ old new]
-;                    (when-not (= old new) (deliver p :changed))))
-;       (deref p timeout-ms :timed-out)
-;       (finally
-;         (remove-watch r :await-change)))))
-; 
-; (defn consume-commands [current] [])
-; 
-; (defn append-command [cmd]
-;   (swap! command-buffer #(conj % cmd)))
-; 
-; (def streamer
-;   (reify ring-proto/StreamableResponseBody
-;     (write-body-to-stream [body response output-stream]
-; 
-;       (with-open [w (io/writer output-stream)]
-;         (loop []
-; 
-;           (println "starting loop")
-; 
-;           (when (zero? (count @command-buffer))
-;             (println "waiting for change")
-;             (await-change command-buffer 5000))
-; 
-;           (let [[consumed _] (swap-vals! command-buffer consume-commands)]
-;             (doseq [cmd consumed]
-;               (.write w (str cmd "\n"));
-;               (.flush w)))
-; 
-;           (recur))))))
-; 
-; (defn streaming [request]
-;   (response/response streamer))
-; 
-; ;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-; 
-; (defn manual [request]
-;   ;(prn request)
-; 
-;   (let [input (:body request)
-;         r (io/reader input)
-;         s (line-seq r)]
-; 
-;     (doseq [l s]
-;       (prn (json/parse-string l))))
-; 
-;   (response/response "ok"))
-; 
-; ;;;;;;;;;;;;;;;;;;;;;;;;;;
-; 
-; (defroutes myapp
-;   (GET "/thunder" [] streaming)
-;   (POST "/manual" [] manual))
-
-
-;; curl http://localhost:3000/thunder | ./thunder
-
-;; ./ps4 | curl --trace-ascii - -H "Transfer-Encoding: chunked" -H "Content-Type: application/json" -X POST -T -  http://localhost:3000/manual
-
-; (def streamer (reify ring-proto/StreamableResponseBody
-;                 (write-body-to-stream [body response output-stream]
-;                   (with-open [w (io/writer output-stream)]
-;                     (doseq [r (range 4)]
-;                       (.write w "fire\n");
-;                       (.flush w)
-;                       (java.lang.Thread/sleep 1000))))))
-
-; (defn thingum [request]
-;   (if (zero? (count @command-buffer))
-;     (await-change command-buffer 5000))
-; 
-;   (let [[consumed _] (swap-vals! command-buffer consume-commands)]
-;     {:status 200
-;      :headers {"Content-Type" "application/json"}
-;      :body (json/generate-string {:commands consumed})}))
-
-
-
-                                        ; (ring-io/piped-input-stream
-                                        ;  (fn [out]
-                                        ;    (let [w (io/make-writer out {})]
-
-                                        ;      (doseq [r (range 4)]
-
-                                        ;        (.write w "fire\n");
-                                        ;        (.flush w)
-                                        ;        (java.lang.Thread/sleep 1000)
-
-;; (println "start of loop")
-
-;; (when (zero? (count @command-buffer))
-;;   (println "waiting for change")
-;;   (await-change command-buffer 5000))
-
-;; (let [[consumed _] (swap-vals! command-buffer consume-commands)
-;;       s (json/generate-string {:commands consumed})]
-
-;;   (println "writing: " s)
-
-;;   (.write w s)
-;;   (.flush w))
-
-                                        ;      ))))))
