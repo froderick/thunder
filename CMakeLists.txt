@@ -41,3 +41,5 @@ set(CMAKE_C_STANDARD 11)
 add_executable(capture-main capture-main.c)
 target_link_libraries(capture-main capture)
 
+add_executable(core errors.c core.c controller.c)
+target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit})
