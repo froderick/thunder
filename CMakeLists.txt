@@ -41,5 +41,5 @@ set(CMAKE_C_STANDARD 11)
 add_executable(capture-main capture-main.c)
 target_link_libraries(capture-main capture)
 
-add_executable(core errors.c core.c controller.c launcher.c)
-target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0)
+add_executable(core errors.c core.c controller.c launcher.c face-capture.c)
+target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture)
