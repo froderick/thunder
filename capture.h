@@ -8,6 +8,9 @@ typedef struct CaptureFace {
 
 #define CAPTURE_MAX_FACES 10
 
+#define CAPTURE_WIDTH 320
+#define CAPTURE_HEIGHT 240
+
 typedef struct CaptureResults {
   uint16_t numFaces;
   CaptureFace faces[CAPTURE_MAX_FACES];

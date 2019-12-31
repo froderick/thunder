@@ -42,9 +42,8 @@ Launcher_t launcherStart() {
     explode("init error");
   }
 
-  libusb_set_option(l->ctx, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
+//  libusb_set_option(l->ctx, LIBUSB_OPTION_LOG_LEVEL, LIBUSB_LOG_LEVEL_DEBUG);
 
-  //libusb_set_debug(ctx, 3); //set verbosity level to 3, as suggested in the documentation
   cnt = libusb_get_device_list(l->ctx, &devs); //get the list of devices
   if(cnt <= 0) {
     explode("Get Device Error %lu\n", cnt);
