@@ -11,6 +11,7 @@
 #include "core.h"
 #include "controller.h"
 #include "launcher.h"
+#include "face-capture.h"
 
 void msleep(uint64_t ms) {
   usleep(ms * 1000);
@@ -22,28 +23,6 @@ uint64_t now() {
   uint64_t millis = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
   return millis;
 }
-
-// https://config9.com/linux/how-to-get-the-current-time-in-milliseconds-from-c-in-linux/
-void print_current_time_with_ms () {
-  long            ms; // Milliseconds
-  time_t          s;  // Seconds
-  struct timespec spec;
-
-  clock_gettime(CLOCK_REALTIME, &spec);
-
-  s  = spec.tv_sec;
-  ms = round(spec.tv_nsec / 1.0e6); // Convert nanoseconds to milliseconds
-  if (ms > 999) {
-    s++;
-    ms = 0;
-  }
-
-  uint64_t n = (s * 1000) + ms;
-
-  printf("Current time: %"PRIu64" ms since the Epoch\n", n);
-}
-
-#define FIRING_MAX_CAPACITY 4
 
 typedef enum {
   LED_OFF,
@@ -73,14 +52,12 @@ typedef struct Core {
   uint8_t remainingShots;
   LedMode ledMode;
   bool ledOn;
-  bool firingEnabled;
-  uint64_t firingStartInstant;
-  bool firingStopScheduled;
-  uint64_t firingEndInstant;
 
   SentryMode sentryMode;
 
 } Core;
+
+#define FIRING_MAX_CAPACITY 4
 
 void coreInit(Core *c) {
   pthread_mutex_init(&c->mutex, NULL);
@@ -313,6 +290,7 @@ void handleControl(Core *core, ControlEvent e) {
 
 void handleFace(Core *core, FaceEvent e) {
 
+  // TODO
 }
 
 char* controlTypeName(ControlType t) {
@@ -383,7 +361,7 @@ bool send(Core *core, Event e) {
       handleControl(core, e.control);
       break;
     case E_FACE:
-      handleControl(core, e.control);
+      handleFace(core, e.face);
       break;
     default:
       printf("error: unknown event type encountered, %u\n", e.type);
@@ -401,49 +379,17 @@ int main() {
 
   Launcher_t launcher = launcherStart();
   Controller_t controller = controllerInit(&core);
+  FaceCapture_t capture = faceCaptureInit(&core);
 
   core.launcher = launcher;
 
   controllerStart(controller);
-
   ledTimerStart(&core);
-
   firingTimerStart(&core);
+  faceCaptureStart(capture);
 
   while (true) {
     sleep(10);
   }
 }
-/*
 
-
-struct timespec calcSleep(uint64_t ms) {
-
-  struct timespec timeToWait;
-  struct timeval now;
-
-  gettimeofday(&now, NULL);
-
-  long seconds = ms / 1000;
-  long millis = ms % 1000;
-
-  timeToWait.tv_sec = now.tv_sec + seconds;
-  timeToWait.tv_nsec = (now.tv_usec + 1000UL * millis) * 1000UL;
-
-  return timeToWait;
-}
-
-void timedWait(pthread_mutex_t mutex, uint64_t ms) {
-  struct timespec timeToWait = calcSleep(3300);
-  int rt = pthread_cond_timedwait(&sleepCond, &core->mutex, &timeToWait);
-  switch (rt) {
-    case 0:
-    case ETIMEDOUT:
-      break;
-    case EINVAL: explode("something about the timed wait is invalid");
-  }
-}
-
-
-
- */

@@ -45,15 +45,15 @@ typedef struct {
  * face event
  */
 
-typedef struct CaptureFace {
+typedef struct CapturedFace {
   int x, y, width, height;
-} CaptureFace;
+} CapturedFace;
 
 #define CAPTURE_MAX_FACES 10
 
 typedef struct {
   uint16_t numFaces;
-  CaptureFace faces[CAPTURE_MAX_FACES];
+  CapturedFace faces[CAPTURE_MAX_FACES];
 } FaceEvent;
 
 /*
