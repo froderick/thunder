@@ -78,8 +78,8 @@ void capture(Capture *c, CaptureResults *results) {
     results->faces[i].height = faces.at(i).height;
   }
 
-  imshow("Live", frame1);
-  waitKey(1);
+//  imshow("Live", frame1);
+//  waitKey(1);
 }
 
 void captureCleanup(Capture *c) {
