@@ -20,6 +20,7 @@ void sendControl(Core_t core, ControlEvent e) {
 #define BUTTON_ID_CROSS 3
 #define BUTTON_ID_CIRCLE 4
 #define BUTTON_ID_TRIANGLE 5
+#define BUTTON_ID_R1 7
 #define BUTTON_ID_DPAD 20
 
 void controllerInputCallback( void* context,  IOReturn result,  void* sender,  IOHIDValueRef value ) {
@@ -50,6 +51,14 @@ void controllerInputCallback( void* context,  IOReturn result,  void* sender,  I
   else if (cookie == BUTTON_ID_CIRCLE) {
     if (int_value == 1) {
       sendControl(core, (ControlEvent){.type = CONTROL_TYPE_SENTRY_MODE_TOGGLE}); // only send down
+    }
+    else {
+      // don't send up
+    }
+  }
+  else if (cookie == BUTTON_ID_R1) {
+    if (int_value == 1) {
+      sendControl(core, (ControlEvent){.type = CONTROL_TYPE_RELOAD}); // only send down
     }
     else {
       // don't send up
@@ -148,24 +157,25 @@ void* controllerThread(void *arg) {
   CFRunLoopRun(); // spins
 
   printf("thread ending\n");
+
+  return NULL;
 }
 
-Controller* controllerStart(Core_t core) {
-
+Controller* controllerInit(Core_t core) {
   Controller *c = malloc(sizeof(Controller));
   if (c == NULL) {
     explode("failed to malloc");
   }
   c->core = core;
+  return c;
+}
+
+void controllerStart(Controller *c) {
 
   pthread_t threadId;
   printf("before thread\n");
   pthread_create(&threadId, NULL, controllerThread, c);
   printf("after thread\n");
-
-  sleep(1000000);
-
-  return c;
 }
 
 // https://stackoverflow.com/questions/1363787/is-it-safe-to-call-cfrunloopstop-from-another-thread

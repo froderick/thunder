@@ -57,21 +57,12 @@ typedef struct {
 } FaceEvent;
 
 /*
- * timer event
- */
-
-typedef enum {
-  E_LED_BLINK,
-} TimerType;
-
-/*
  * sending events
  */
 
 typedef enum {
   E_CONTROL,
   E_FACE,
-  E_TIMER,
 } EventType;
 
 typedef struct {
@@ -80,7 +71,6 @@ typedef struct {
   union {
     ControlEvent control;
     FaceEvent face;
-    TimerType timer;
   };
 } Event;
 
