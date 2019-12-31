@@ -12,6 +12,7 @@
 #include "controller.h"
 #include "launcher.h"
 #include "face-capture.h"
+#include "capture.h"
 
 void msleep(uint64_t ms) {
   usleep(ms * 1000);
@@ -54,6 +55,8 @@ typedef struct Core {
   bool ledOn;
 
   SentryMode sentryMode;
+  bool trackingFace;
+  bool moving;
 
 } Core;
 
@@ -68,6 +71,8 @@ void coreInit(Core *c) {
   c->sentryMode = SENTRY_MODE_PASSIVE;
   c->launcher = NULL;
   c->ledOn = false;
+  c->trackingFace = false;
+  c->moving = false;
 }
 
 void toggleMode(Core *core) {
@@ -288,9 +293,116 @@ void handleControl(Core *core, ControlEvent e) {
   }
 }
 
+bool isInside(int circle_x, int circle_y, int rad, int x, int y) {
+  if ((x - circle_x) * (x - circle_x) +
+      (y - circle_y) * (y - circle_y) <= rad * rad)
+    return true;
+  else
+    return false;
+}
+
 void handleFace(Core *core, FaceEvent e) {
 
-  // TODO
+  if (e.numFaces == 0) {
+    if (core->trackingFace) {
+      // nothing to track now
+      launcherSend(core->launcher, LAUNCHER_STOP);
+      core->trackingFace = false;
+      core->moving = false;
+    }
+  }
+  else {
+
+    CapturedFace *largestFace = NULL;
+    for (int i=0; i<e.numFaces; i++) {
+      if (largestFace == NULL || e.faces[i].width > largestFace->width) {
+        largestFace = &e.faces[i];
+      }
+    }
+    if (largestFace == NULL) {
+      explode("didn't get a face");
+    }
+
+    int centerX = CAPTURE_WIDTH / 2;
+    int centerY = CAPTURE_HEIGHT / 2;
+
+    int faceCenterX = largestFace->x + (largestFace->width / 2);
+    int faceCenterY = largestFace->y + (largestFace->height / 2);
+
+    // determine face center's distance
+
+    /*
+     * idea:
+     * there could be near, middle, and far range circles for determining centeredness
+     * which circle applies can be based on how big the face is
+     *
+     * need to determine distance based on face size
+     * if you're too far away, don't even attempt tracking
+     * closer, you might be close enough to attempt tracking, but not firing because too inaccurate
+     * - in this mode we should have a high threshold for actually moving the launcher, fuzzy idea of 'centered'
+     * then, there are roughly two accurate firing ranges
+     * - your face is close enough that it can be reasonably targeted at all (face fits in target circle)
+     * - .. there's a squishy window in the middle here we have to figure out
+     * - your face is close enough that it can be directly centered (target circle fits in face)
+     *
+     * another idea, when within a certain close angular distance, only attempt to fine-adjust 3 times
+     *
+     * another idea: sounds would be fun: https://www.zedge.net/find/ringtones/oblivion
+     */
+
+    if (isInside(centerX, centerY, 50, faceCenterX, faceCenterY)) {
+      printf("face centered on cirlce\n");
+      if (core->moving) {
+        launcherSend(core->launcher, LAUNCHER_STOP);
+      }
+    }
+    else if (   (centerX > largestFace->x)
+        && (centerX < (largestFace->x + largestFace->width))
+        && (centerY > largestFace->y)
+        && (centerY < (largestFace->y + largestFace->height))) {
+      printf("center of screen inside face box\n");
+      if (core->moving) {
+        launcherSend(core->launcher, LAUNCHER_STOP);
+      }
+    }
+    else {
+
+      int xAbs = abs(centerX - faceCenterX);
+      int yAbs = abs(centerY - faceCenterY);
+
+      if (xAbs >= yAbs) {
+        // move horizontally
+        if (faceCenterX < centerX) {
+          // move left
+          launcherSend(core->launcher, LAUNCHER_LEFT);
+        }
+        else {
+          // move right
+          launcherSend(core->launcher, LAUNCHER_RIGHT);
+        }
+      }
+      else {
+        // move vertically
+        if (faceCenterY < centerY) {
+          // move up
+          launcherSend(core->launcher, LAUNCHER_UP);
+        }
+        else {
+          // move down
+          launcherSend(core->launcher, LAUNCHER_DOWN);
+        }
+      }
+    }
+
+    core->trackingFace = true;
+  }
+
+
+
+  // TODO: write the sentry code
+
+  // TODO: figure out how to continue displaying images with imshow (only works on the main thread)
+  // could just use the main thread (which isn't doing anything) to drive the capture logic
 }
 
 char* controlTypeName(ControlType t) {
@@ -379,17 +491,44 @@ int main() {
 
   Launcher_t launcher = launcherStart();
   Controller_t controller = controllerInit(&core);
-  FaceCapture_t capture = faceCaptureInit(&core);
+//  FaceCapture_t capture = faceCaptureInit(&core);
 
   core.launcher = launcher;
 
   controllerStart(controller);
   ledTimerStart(&core);
   firingTimerStart(&core);
-  faceCaptureStart(capture);
 
-  while (true) {
-    sleep(10);
+  Capture_t cap = captureInit();
+  CaptureResults results;
+
+//  uint64_t last = now();
+
+  while (1) {
+    capture(cap, &results);
+
+    Event e;
+    e.whenOccurred = now();
+    e.type = E_FACE;
+    e.face.numFaces = results.numFaces;
+    for (int i=0; i<results.numFaces; i++) {
+      e.face.faces[i].x = results.faces[i].x;
+      e.face.faces[i].y = results.faces[i].y;
+      e.face.faces[i].width = results.faces[i].width;
+      e.face.faces[i].height = results.faces[i].height;
+    }
+    send(&core, e);
+
+//    uint64_t this = now();
+//    printf("cycle: %" PRIu64 "\n", this - last);
+//    last = this;
   }
+
+
+//  faceCaptureStart(capture);
+//
+//  while (true) {
+//    sleep(10);
+//  }
 }
 

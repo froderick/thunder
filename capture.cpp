@@ -5,6 +5,8 @@
 #include <opencv2/imgproc.hpp>
 #include <iostream>
 #include <stdio.h>
+#include <stdint.h>
+#include <inttypes.h>
 
 using namespace cv;
 using namespace std;
@@ -30,8 +32,9 @@ Capture* captureInit() {
     exit(-1);
   }
 
-  cap->set(CAP_PROP_FRAME_WIDTH, 1920);
-  cap->set(CAP_PROP_FRAME_HEIGHT, 1080);
+  cap->set(CAP_PROP_FRAME_WIDTH, CAPTURE_WIDTH);
+  cap->set(CAP_PROP_FRAME_HEIGHT, CAPTURE_HEIGHT);
+  cap->set(CAP_PROP_FPS, 60);
 
   CascadeClassifier *cascade = new CascadeClassifier();
   cascade->load("/usr/local/Cellar/opencv/4.1.2/share/opencv4/haarcascades/haarcascade_frontalface_default.xml");
@@ -48,17 +51,35 @@ Capture* captureInit() {
   return c;
 }
 
+uint64_t now1() {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  uint64_t millis = ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+  return millis;
+}
+
 void capture(Capture *c, CaptureResults *results) {
+
 
   Mat frame;
 
-  c->cap->read(frame);
+  {
+    uint64_t start = now1();
+    c->cap->read(frame);
+    uint64_t end = now1();
+    printf("capture: %" PRIu64 "\n", end - start);
+  }
+
   if (frame.empty()) {
     printf("ERROR! blank frame grabbed\n");
     exit(-1);
   }
 
+
+  uint64_t start = now1();
+
   Mat frame1 = frame.clone();
+
   Mat gray;
   vector<Rect> faces;
 
@@ -70,6 +91,10 @@ void capture(Capture *c, CaptureResults *results) {
     rectangle(frame1, Point(f.x, f.y), Point(f.x + f.width, f.y + f.height), (255, 0, 0), 2);
   }
 
+  int centerX = CAPTURE_WIDTH / 2;
+  int centerY = CAPTURE_HEIGHT / 2;
+  circle(frame1, Point(centerX, centerY), 100, (255, 0, 0), 2);
+
   results->numFaces = faces.size();
   for (int i = 0; i < faces.size(); i++) {
     results->faces[i].x = faces.at(i).x;
@@ -80,6 +105,10 @@ void capture(Capture *c, CaptureResults *results) {
 
 //  imshow("Live", frame1);
 //  waitKey(1);
+
+  uint64_t end = now1();
+  printf("recognize: %" PRIu64 "\n", end - start);
+
 }
 
 void captureCleanup(Capture *c) {
