@@ -2,11 +2,15 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "core.h"
-#include "errors.h"
-#include "controller.h"
 #include <inttypes.h>
 #include <math.h>
+#include <sys/time.h>
+#include <errno.h>
+
+#include "errors.h"
+#include "core.h"
+#include "controller.h"
+#include "launcher.h"
 
 void msleep(uint64_t ms) {
   usleep(ms * 1000);
@@ -59,18 +63,34 @@ typedef enum {
 
 typedef struct Core {
   pthread_mutex_t mutex;
+  pthread_cond_t fireCond;
+
+  bool continueFiring; // set by controller inputs, read by fire thread
+
+  Launcher_t launcher;
+
   ControlMode mode;
   uint8_t remainingShots;
   LedMode ledMode;
+  bool ledOn;
+  bool firingEnabled;
+  uint64_t firingStartInstant;
+  bool firingStopScheduled;
+  uint64_t firingEndInstant;
+
   SentryMode sentryMode;
+
 } Core;
 
 void coreInit(Core *c) {
   pthread_mutex_init(&c->mutex, NULL);
+  pthread_cond_init(&c->fireCond, NULL);
   c->mode = MODE_MANUAL;
   c->remainingShots = FIRING_MAX_CAPACITY;
   c->ledMode = LED_OFF;
   c->sentryMode = SENTRY_MODE_PASSIVE;
+  c->launcher = NULL;
+  c->ledOn = false;
 }
 
 void toggleMode(Core *core) {
@@ -78,41 +98,186 @@ void toggleMode(Core *core) {
 }
 
 void reloaded(Core *core) {
+  printf("info: reloading\n");
   core->remainingShots = FIRING_MAX_CAPACITY;
 }
 
+#define LED_BLINK_DURATION 100
+
+void* ledTimerFn(void *arg) {
+  Core *core = (Core*)arg;
+
+  while (true) {
+    msleep(LED_BLINK_DURATION);
+
+    pthread_mutex_lock(&core->mutex);
+    switch (core->ledMode) {
+      case LED_OFF:
+      case LED_ON:
+        break;
+      case LED_BLINK: {
+        LauncherCmd cmd;
+        if (core->ledOn) {
+          core->ledOn = false;
+          cmd = LAUNCHER_LEDOFF;
+        } else {
+          core->ledOn = true;
+          cmd = LAUNCHER_LEDON;
+        }
+        launcherSend(core->launcher, cmd);
+        break;
+      }
+      default:
+        explode("unknown ledmode: %u\n", core->ledMode);
+    }
+    pthread_mutex_unlock(&core->mutex);
+  }
+
+  return NULL;
+}
+
+void ledTimerStart(Core *core) {
+  pthread_t threadId;
+  pthread_create(&threadId, NULL, ledTimerFn, core);
+}
+
 void toggleLed(Core *core) {
+
+  if (core->mode != MODE_MANUAL) {
+    printf("info: ignoring led toggle in non-manual mode\n");
+    return;
+  }
+
   switch (core->ledMode) {
     case LED_OFF:
       core->ledMode = LED_ON;
-      // TODO: send on command to launcher
+      launcherSend(core->launcher, LAUNCHER_LEDON);
       break;
     case LED_ON:
       core->ledMode = LED_BLINK; // scheduler will pick this up
       break;
     case LED_BLINK:
       core->ledMode = LED_OFF;
-      // TODO: send off command to launcher
+      launcherSend(core->launcher, LAUNCHER_LEDOFF);
       break;
     default:
       explode("unknown led mode");
   }
 }
 
+#define FIRE_DURATION 3300
+
+void* firingTimerFn(void *arg) {
+  Core *core = (Core*)arg;
+
+  // just used for sleeping
+  pthread_cond_t sleepCond;
+  pthread_cond_init(&sleepCond, NULL);
+
+  pthread_mutex_lock(&core->mutex);
+
+  while (true) {
+
+    while (core->continueFiring && core->remainingShots > 0) {
+      printf("firing (remainingShots = %u)\n", core->remainingShots);
+      launcherSend(core->launcher, LAUNCHER_FIRE);
+
+      pthread_mutex_unlock(&core->mutex);
+      msleep(FIRE_DURATION);
+      pthread_mutex_lock(&core->mutex);
+
+      core->remainingShots -= 1;
+    }
+
+    if (core->continueFiring && core->remainingShots == 0) {
+      printf("out of ammo!\n");
+    }
+
+    printf("waiting for signal to start firing\n");
+    int rt = pthread_cond_wait(&core->fireCond, &core->mutex);
+    switch (rt) {
+      case 0:
+        break;
+      case EINVAL:
+        explode("something about the wait is invalid");
+    }
+  }
+
+  pthread_mutex_unlock(&core->mutex);
+  return NULL;
+}
+
+void firingTimerStart(Core *core) {
+  pthread_t threadId;
+  pthread_create(&threadId, NULL, firingTimerFn, core);
+}
+
 void beginFiring(Core *core) {
 
+  if (core->mode != MODE_MANUAL) {
+    printf("info: ignoring begin-firing non-manual mode\n");
+    return;
+  }
+
+  core->continueFiring = true;
+
+  int rt = pthread_cond_signal(&core->fireCond);
+  switch (rt) {
+    case 0:
+      break;
+    case EINVAL: explode("something about the signal is invalid");
+  }
 }
 
 void endFiring(Core *core) {
-
+  if (core->mode != MODE_MANUAL) {
+    printf("info: ignoring end-firing non-manual mode\n");
+    return;
+  }
+  core->continueFiring = false;
 }
 
 void move(Core *core, Movement m) {
 
+  if (core->mode != MODE_MANUAL) {
+    printf("info: ignoring move in non-manual mode\n");
+    return;
+  }
+
+  if (core->continueFiring) {
+    printf("info: ignoring move while firing\n");
+    return;
+  }
+
+  LauncherCmd cmd;
+  switch (m) {
+    case MOVE_UP:
+      cmd = LAUNCHER_UP;
+      break;
+    case MOVE_DOWN:
+      cmd = LAUNCHER_DOWN;
+      break;
+    case MOVE_LEFT:
+      cmd = LAUNCHER_LEFT;
+      break;
+    case MOVE_RIGHT:
+      cmd = LAUNCHER_RIGHT;
+      break;
+    case MOVE_NONE:
+      cmd  = LAUNCHER_STOP;
+      break;
+    default:
+      explode("unknown movement: %u\n", m)
+  }
+  launcherSend(core->launcher, cmd);
 }
 
 void toggleSentryMode(Core *core) {
 
+  if (core->mode != MODE_SENTRY) {
+    printf("info: ignoring toggle-sentry-mode in manual mode\n");
+    return;
+  }
 }
 
 void handleControl(Core *core, ControlEvent e) {
@@ -147,10 +312,6 @@ void handleControl(Core *core, ControlEvent e) {
 }
 
 void handleFace(Core *core, FaceEvent e) {
-
-}
-
-void handleTimer(Core *core, TimerType t) {
 
 }
 
@@ -207,9 +368,6 @@ void printEvent(Event e) {
     case E_FACE:
       printf("{\"type\": \"face\",  \"whenOccurred\": \"%" PRIu64 "\"}\n", e.whenOccurred);
       break;
-    case E_TIMER:
-      printf("{\"type\": \"timer\",  \"whenOccurred\": \"%" PRIu64 "\"}\n", e.whenOccurred);
-      break;
     default:
     explode("unknown event type: %u\n", e.type);
   }
@@ -219,17 +377,13 @@ void printEvent(Event e) {
 bool send(Core *core, Event e) {
   pthread_mutex_lock(&core->mutex);
 
-  printEvent(e);
-
   switch (e.type) {
     case E_CONTROL:
+      printEvent(e);
       handleControl(core, e.control);
       break;
     case E_FACE:
       handleControl(core, e.control);
-      break;
-    case E_TIMER:
-      handleTimer(core, e.timer);
       break;
     default:
       printf("error: unknown event type encountered, %u\n", e.type);
@@ -242,10 +396,54 @@ bool send(Core *core, Event e) {
 
 int main() {
 
-  print_current_time_with_ms();
-
   Core core;
   coreInit(&core);
 
-  Controller_t controller = controllerStart(&core);
+  Launcher_t launcher = launcherStart();
+  Controller_t controller = controllerInit(&core);
+
+  core.launcher = launcher;
+
+  controllerStart(controller);
+
+  ledTimerStart(&core);
+
+  firingTimerStart(&core);
+
+  while (true) {
+    sleep(10);
+  }
 }
+/*
+
+
+struct timespec calcSleep(uint64_t ms) {
+
+  struct timespec timeToWait;
+  struct timeval now;
+
+  gettimeofday(&now, NULL);
+
+  long seconds = ms / 1000;
+  long millis = ms % 1000;
+
+  timeToWait.tv_sec = now.tv_sec + seconds;
+  timeToWait.tv_nsec = (now.tv_usec + 1000UL * millis) * 1000UL;
+
+  return timeToWait;
+}
+
+void timedWait(pthread_mutex_t mutex, uint64_t ms) {
+  struct timespec timeToWait = calcSleep(3300);
+  int rt = pthread_cond_timedwait(&sleepCond, &core->mutex, &timeToWait);
+  switch (rt) {
+    case 0:
+    case ETIMEDOUT:
+      break;
+    case EINVAL: explode("something about the timed wait is invalid");
+  }
+}
+
+
+
+ */
