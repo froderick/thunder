@@ -13,6 +13,19 @@
 #include "launcher.h"
 #include "face-capture.h"
 #include "capture.h"
+#include "sound.h"
+
+#define SOUND_SENTRY_OFF         "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-off.mp3"
+#define SOUND_SENTRY_PASSIVE     "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-passive.mp3"
+#define SOUND_SENTRY_ARMED       "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-armed.mp3"
+#define SOUND_RELOAD             "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/reload.mp3"
+#define SOUND_NO_AMMO            "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/no-ammo.mp3"
+
+#define SOUND_TRACKING           "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry_tracking.mp3"
+#define SOUND_SENTRY_DEACTIVATED "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry_deactivated.mp3"
+#define SOUND_6 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone.mp3"
+#define SOUND_7 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_2.mp3"
+#define SOUND_8 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_3.mp3"
 
 void msleep(uint64_t ms) {
   usleep(ms * 1000);
@@ -28,7 +41,8 @@ uint64_t now() {
 typedef enum {
   LED_OFF,
   LED_ON,
-  LED_BLINK,
+  LED_BLINK_SLOW,
+  LED_BLINK_FAST,
 } LedMode;
 
 typedef enum {
@@ -75,20 +89,32 @@ void coreInit(Core *c) {
   c->moving = false;
 }
 
-#define LED_BLINK_DURATION 100
+#define LED_BLINK_SLOW_DURATION 500
+#define LED_BLINK_FAST_DURATION 100
 
 void* ledTimerFn(void *arg) {
   Core *core = (Core*)arg;
 
   while (true) {
-    msleep(LED_BLINK_DURATION);
 
-    pthread_mutex_lock(&core->mutex);
+    switch (core->ledMode) {
+      case LED_BLINK_SLOW:
+        msleep(LED_BLINK_SLOW_DURATION);
+        break;
+      case LED_BLINK_FAST:
+        msleep(LED_BLINK_FAST_DURATION);
+        break;
+      default:
+        msleep(LED_BLINK_SLOW_DURATION);
+    }
+
+      pthread_mutex_lock(&core->mutex);
     switch (core->ledMode) {
       case LED_OFF:
       case LED_ON:
         break;
-      case LED_BLINK: {
+      case LED_BLINK_SLOW:
+      case LED_BLINK_FAST: {
         LauncherCmd cmd;
         if (core->ledOn) {
           core->ledOn = false;
@@ -123,7 +149,8 @@ void setLedMode(Core *core, LedMode mode) {
     case LED_ON:
       launcherSend(core->launcher, LAUNCHER_LEDON);
       break;
-    case LED_BLINK:
+    case LED_BLINK_SLOW:
+    case LED_BLINK_FAST:
       // timer will pick this up
       break;
     default: explode("unknown led mode");
@@ -136,9 +163,12 @@ void toggleLed(Core *core) {
       setLedMode(core, LED_ON);
       break;
     case LED_ON:
-      setLedMode(core, LED_BLINK);
+      setLedMode(core, LED_BLINK_SLOW);
       break;
-    case LED_BLINK:
+    case LED_BLINK_SLOW:
+      setLedMode(core, LED_BLINK_FAST);
+      break;
+    case LED_BLINK_FAST:
       setLedMode(core, LED_OFF);
       break;
     default:
@@ -160,6 +190,7 @@ void* firingTimerFn(void *arg) {
   while (true) {
 
     if (core->continueFiring) {
+
       while (core->continueFiring && core->remainingShots > 0) {
         printf("firing (remainingShots = %u)\n", core->remainingShots);
         launcherSend(core->launcher, LAUNCHER_FIRE);
@@ -173,6 +204,7 @@ void* firingTimerFn(void *arg) {
 
       if (core->continueFiring && core->remainingShots == 0) {
         printf("out of ammo!\n");
+        playSound(SOUND_NO_AMMO);
       }
     }
 
@@ -244,6 +276,7 @@ void move(Core *core, Movement m) {
 void reload(Core *core) {
   printf("info: reloading\n");
   core->remainingShots = FIRING_MAX_CAPACITY;
+  playSound(SOUND_RELOAD);
   int rt = pthread_cond_signal(&core->fireCond);
   switch (rt) {
     case 0:
@@ -252,34 +285,57 @@ void reload(Core *core) {
   }
 }
 
+void sentryModeChanged(Core *core) {
+  switch (core->sentryMode) {
+    case SENTRY_MODE_OFF:
+      printf("sentry: disabled\n");
+      playSound(SOUND_SENTRY_OFF);
+      setLedMode(core, LED_OFF);
+      break;
+    case SENTRY_MODE_PASSIVE:
+      printf("sentry: passive mode enabled\n");
+      playSound(SOUND_SENTRY_PASSIVE);
+      break;
+    case SENTRY_MODE_ARMED:
+      printf("sentry: armed mode enabled\n");
+      playSound(SOUND_SENTRY_ARMED);
+      break;
+  }
+}
+
 void toggleMode(Core *core) {
   core->trackingFace = false;
   core->moving = false;
 
   if (core->sentryMode == SENTRY_MODE_OFF) {
-    printf("info: sentry mode enabled\n");
     core->sentryMode = SENTRY_MODE_PASSIVE;
+    sentryModeChanged(core);
   }
   else {
-    printf("info: sentry mode disabled\n");
     core->sentryMode = SENTRY_MODE_OFF;
+    sentryModeChanged(core);
   }
 }
 
 void toggleSentryMode(Core *core) {
 
+  bool changed = false;
   switch (core->sentryMode) {
     case SENTRY_MODE_OFF:
       printf("info: ignoring toggle-sentry-mode when sentry is disabled\n");
       break;
     case SENTRY_MODE_PASSIVE:
       core->sentryMode = SENTRY_MODE_ARMED; // red light is off by default, starts blinking when tracking
-      printf("sentry: armed mode enabled\n");
+      changed = true;
       break;
     case SENTRY_MODE_ARMED:
       core->sentryMode = SENTRY_MODE_PASSIVE; // red light is on by default
-      printf("sentry: passive mode enabled\n");
+      changed = true;
       break;
+  }
+
+  if (changed) {
+    sentryModeChanged(core);
   }
 }
 
@@ -322,13 +378,21 @@ bool isInside(int circle_x, int circle_y, int rad, int x, int y) {
     return false;
 }
 
+/*
+ * light is off when sentry is off
+ * blink slowly when sentry is enabled
+ * blink faster when sentry is tracking a face
+ * solid red when sentry has a face in its sights
+ */
+
 void handleFace(Core *core, FaceEvent e) {
 
-  if (!core->sentryMode) {
+  if (core->sentryMode == SENTRY_MODE_OFF) {
     return;
   }
 
   if (e.numFaces == 0) {
+    setLedMode(core, LED_BLINK_SLOW);
     if (core->trackingFace) {
       // nothing to track now
       move(core, MOVE_NONE);
@@ -377,6 +441,7 @@ void handleFace(Core *core, FaceEvent e) {
 
     if (isInside(centerX, centerY, CAPTURE_CIRCLE_RADIUS, faceCenterX, faceCenterY)) {
       printf("sentry: face centered on circle\n");
+      setLedMode(core, LED_ON);
       if (core->moving) {
         move(core, MOVE_NONE);
         core->moving = false;
@@ -391,6 +456,7 @@ void handleFace(Core *core, FaceEvent e) {
         && (centerY > largestFace->y)
         && (centerY < (largestFace->y + largestFace->height))) {
       printf("sentry: center of screen inside face box\n");
+      setLedMode(core, LED_ON);
       if (core->moving) {
         move(core, MOVE_NONE);
         core->moving = false;
@@ -436,6 +502,7 @@ void handleFace(Core *core, FaceEvent e) {
       }
 
       core->moving = true;
+      setLedMode(core, LED_BLINK_FAST);
     }
 
     core->trackingFace = true;
@@ -523,6 +590,7 @@ bool send(Core *core, Event e) {
 
 int main() {
 
+
   Launcher_t launcher = launcherStart();
 
   Core core;
@@ -530,6 +598,8 @@ int main() {
   core.launcher = launcher;
   ledTimerStart(&core);
   firingTimerStart(&core);
+
+  sentryModeChanged(&core);
 
   Controller_t controller = controllerInit(&core);
   controllerStart(controller);

@@ -1,79 +1,43 @@
 #import <Foundation/Foundation.h>
 #import <AppKit/AppKit.h>
 #import <AVFoundation/AVFoundation.h>
+#import <pthread.h>
+#import "sound.h"
 
-@interface Listener : NSObject <AVAudioPlayerDelegate>
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)player
-                       successfully:(BOOL)flag;
-- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player
-                                 error:(NSError *)error;
-- (void)play:(char *)path;
+#define PLAY_DURATION_SECONDS 10
 
-@property (nonatomic, strong) AVAudioPlayer* player;
-@end
+void* playThreadFn(void *arg) {
+  char *filePath = (char*)arg;
 
-@implementation Listener
-@synthesize player = mPlayer;
-- (void)audioPlayerDidFinishPlaying:(AVAudioPlayer *)data successfully:(BOOL)flag {
-  printf("DONE\n");
-//  NSLog(@"done!");
-}
+  @autoreleasepool {
 
-- (void)audioPlayerDecodeErrorDidOccur:(AVAudioPlayer *)player error:(NSError *)error
-{
-  NSLog(@"%s error=%@", __PRETTY_FUNCTION__, error);
-}
+    NSString *urlString = [[NSString alloc] initWithUTF8String:filePath];
+    NSURL *url = [NSURL fileURLWithPath:urlString];
+    NSError *error;
+    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&error];
 
-- (void)play:(char *)path {
+    if (error) {
+      NSLog(@"Error in audioPlayer: %@",
+            [error localizedDescription]);
+    } else {
+      [player play];
+    }
 
-  NSString *urlString = [[NSString alloc] initWithUTF8String:path];
-  NSURL *url = [NSURL fileURLWithPath:urlString];
-  NSError *error;
-  self.player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&error];
-
-  self.player.delegate = self;
-
-  if (error) {
-    NSLog(@"Error in audioPlayer: %@",
-          [error localizedDescription]);
-  } else {
-    [self.player play];
+    sleep(PLAY_DURATION_SECONDS);
   }
 
+  return NULL;
 }
-@end
 
-//void play(char* path) {
+void playSound(char *filePath) {
+  pthread_t threadId;
+  pthread_create(&threadId, NULL, playThreadFn, filePath);
+}
+
+//int main(int argc, const char * argv[]) {
 //  @autoreleasepool {
-//
-//    NSString *urlString = [[NSString alloc] initWithUTF8String:path];
-//    NSURL *url = [NSURL fileURLWithPath:urlString];
-//    NSError *error;
-//    AVAudioPlayer *player = [[AVAudioPlayer alloc] initWithContentsOfURL:url error:&error];
-//
-//    player.delegate = [[Listener alloc] init];
-//
-//    if (error) {
-//      NSLog(@"Error in audioPlayer: %@",
-//            [error localizedDescription]);
-//    } else {
-//      [player play];
-//    }
-//
-//
-//
-//    sleep(10);
+//    char *path = "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_ok.mp3";
+//    play(path);
+//    return 0;
 //  }
 //}
-
-int main(int argc, const char * argv[]) {
-  @autoreleasepool {
-    Listener *l = [[Listener alloc] init];
-    char *path = "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_ok.mp3";
-    [l play:path];
-
-    sleep(100000);
-//  play("/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_ok.mp3");
-    return 0;
-  }
-}

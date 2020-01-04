@@ -26,8 +26,11 @@ target_link_libraries(capture-ps3eye usb-1.0 ${OpenCV_LIBS})
 
 set(CMAKE_C_STANDARD 11)
 
+add_library(sound sound.m)
+target_link_libraries(sound ${foundation_lib} ${appkit} ${avfoundation})
+
 add_executable(core errors.c core.c controller.c launcher.c face-capture.c)
-target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture-ps3eye)
+target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture-ps3eye sound)
 
 add_executable(test test.m)
 target_link_libraries(test ${foundation_lib} ${appkit} ${avfoundation})
