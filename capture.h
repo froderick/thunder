@@ -8,6 +8,8 @@ typedef struct CaptureFace {
 
 #define CAPTURE_MAX_FACES 10
 
+#define CAPTURE_CIRCLE_RADIUS 30
+
 #define CAPTURE_WIDTH 320
 #define CAPTURE_HEIGHT 240
 
