@@ -86,8 +86,8 @@ void capture(Capture *c, CaptureResults *results) {
     results->faces[i].height = faces.at(i).height;
   }
 
-//  imshow("Live", *c->bgr);
-//  waitKey(1);
+  imshow("Live", *c->bgr);
+  waitKey(1);
 
 //  uint64_t end = now1();
 //  printf("capture and recognize: %" PRIu64 "ms\n", end - start);
