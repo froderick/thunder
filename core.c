@@ -75,31 +75,6 @@ void coreInit(Core *c) {
   c->moving = false;
 }
 
-void toggleMode(Core *core) {
-  core->trackingFace = false;
-  core->moving = false;
-
-  if (core->sentryMode == SENTRY_MODE_OFF) {
-    printf("info: sentry mode enabled\n");
-    core->sentryMode = SENTRY_MODE_PASSIVE;
-  }
-  else {
-    printf("info: sentry mode disabled\n");
-    core->sentryMode = SENTRY_MODE_OFF;
-  }
-}
-
-void reloaded(Core *core) {
-  printf("info: reloading\n");
-  core->remainingShots = FIRING_MAX_CAPACITY;
-  int rt = pthread_cond_signal(&core->fireCond);
-  switch (rt) {
-    case 0:
-      break;
-    case EINVAL: explode("something about the signal is invalid");
-  }
-}
-
 #define LED_BLINK_DURATION 100
 
 void* ledTimerFn(void *arg) {
@@ -139,22 +114,35 @@ void ledTimerStart(Core *core) {
   pthread_create(&threadId, NULL, ledTimerFn, core);
 }
 
-void toggleLed(Core *core) {
-
+void setLedMode(Core *core, LedMode mode) {
+  core->ledMode = mode;
   switch (core->ledMode) {
     case LED_OFF:
-      core->ledMode = LED_ON;
-      launcherSend(core->launcher, LAUNCHER_LEDON);
-      break;
-    case LED_ON:
-      core->ledMode = LED_BLINK; // scheduler will pick this up
-      break;
-    case LED_BLINK:
-      core->ledMode = LED_OFF;
       launcherSend(core->launcher, LAUNCHER_LEDOFF);
       break;
+    case LED_ON:
+      launcherSend(core->launcher, LAUNCHER_LEDON);
+      break;
+    case LED_BLINK:
+      // timer will pick this up
+      break;
+    default: explode("unknown led mode");
+  }
+}
+
+void toggleLed(Core *core) {
+  switch (core->ledMode) {
+    case LED_OFF:
+      setLedMode(core, LED_ON);
+      break;
+    case LED_ON:
+      setLedMode(core, LED_BLINK);
+      break;
+    case LED_BLINK:
+      setLedMode(core, LED_OFF);
+      break;
     default:
-      explode("unknown led mode");
+    explode("unknown led mode");
   }
 }
 
@@ -253,6 +241,31 @@ void move(Core *core, Movement m) {
   }
 }
 
+void reload(Core *core) {
+  printf("info: reloading\n");
+  core->remainingShots = FIRING_MAX_CAPACITY;
+  int rt = pthread_cond_signal(&core->fireCond);
+  switch (rt) {
+    case 0:
+      break;
+    case EINVAL: explode("something about the signal is invalid");
+  }
+}
+
+void toggleMode(Core *core) {
+  core->trackingFace = false;
+  core->moving = false;
+
+  if (core->sentryMode == SENTRY_MODE_OFF) {
+    printf("info: sentry mode enabled\n");
+    core->sentryMode = SENTRY_MODE_PASSIVE;
+  }
+  else {
+    printf("info: sentry mode disabled\n");
+    core->sentryMode = SENTRY_MODE_OFF;
+  }
+}
+
 void toggleSentryMode(Core *core) {
 
   switch (core->sentryMode) {
@@ -277,7 +290,7 @@ void handleControl(Core *core, ControlEvent e) {
       toggleMode(core);
       break;
     case CONTROL_TYPE_RELOAD:
-      reloaded(core);
+      reload(core);
       break;
 
     // manual controls
@@ -361,9 +374,6 @@ void handleFace(Core *core, FaceEvent e) {
      *
      * another idea: sounds would be fun: https://www.zedge.net/find/ringtones/oblivion
      */
-
-    // TODO: if we don't want to interrupt the firing procedure with movement, then all movement should happen on the
-    //       firing thread also?
 
     if (isInside(centerX, centerY, CAPTURE_CIRCLE_RADIUS, faceCenterX, faceCenterY)) {
       printf("sentry: face centered on circle\n");
