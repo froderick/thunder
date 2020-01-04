@@ -22,6 +22,11 @@ typedef enum {
   MOVE_NONE,
 } Movement;
 
+/*
+ * consider a contract rework where the controller and the sentry behavior are both just drivers of the
+ * same port, with the exception that the controller is capable of enabling/disabling sentry behavior
+ */
+
 typedef enum {
   CONTROL_TYPE_MODE_TOGGLE,
   CONTROL_TYPE_RELOAD,

@@ -10,9 +10,12 @@ link_directories(/usr/local/lib)
 
 add_definitions("-DDEBUG=1")
 
+find_library(foundation_lib Foundation)
 find_library(corefoundation_lib CoreFoundation)
 find_library(cfnetwork_lib CFNetwork)
+find_library(avfoundation AVFoundation)
 find_library(iokit IOKit)
+find_library(appkit AppKit)
 find_library(usb_lib usb-1.0)
 find_package( OpenCV REQUIRED )
 
@@ -33,8 +36,15 @@ set(CMAKE_CXX_STANDARD 11)
 add_library(capture capture.cpp)
 target_link_libraries(capture ${OpenCV_LIBS})
 
+add_library(capture-ps3eye ps3eye.cpp capture-ps3eye.cpp)
+target_link_libraries(capture-ps3eye usb-1.0 ${OpenCV_LIBS})
+
 add_executable(cap-1 cap-1.cpp)
 target_link_libraries(cap-1 ${OpenCV_LIBS})
+
+
+add_executable(eye-test ps3eye.cpp eye-test.cpp)
+target_link_libraries(eye-test usb-1.0 ${OpenCV_LIBS})
 
 set(CMAKE_C_STANDARD 11)
 
@@ -42,4 +52,8 @@ add_executable(capture-main capture-main.c)
 target_link_libraries(capture-main capture)
 
 add_executable(core errors.c core.c controller.c launcher.c face-capture.c)
-target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture)
+target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture-ps3eye)
+
+add_executable(test test.m)
+target_link_libraries(test ${foundation_lib} ${appkit} ${avfoundation})
+

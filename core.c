@@ -32,6 +32,7 @@ typedef enum {
 } LedMode;
 
 typedef enum {
+  SENTRY_MODE_OFF,
   SENTRY_MODE_PASSIVE,
   SENTRY_MODE_ARMED,
 } SentryMode;
@@ -45,11 +46,8 @@ typedef struct Core {
   pthread_mutex_t mutex;
   pthread_cond_t fireCond;
 
-  bool continueFiring; // set by controller inputs, read by fire thread
-
   Launcher_t launcher;
-
-  ControlMode mode;
+  bool continueFiring; // set by controller inputs, read by fire thread
   uint8_t remainingShots;
   LedMode ledMode;
   bool ledOn;
@@ -65,7 +63,6 @@ typedef struct Core {
 void coreInit(Core *c) {
   pthread_mutex_init(&c->mutex, NULL);
   pthread_cond_init(&c->fireCond, NULL);
-  c->mode = MODE_MANUAL;
   c->remainingShots = FIRING_MAX_CAPACITY;
   c->ledMode = LED_OFF;
   c->sentryMode = SENTRY_MODE_PASSIVE;
@@ -125,10 +122,10 @@ void ledTimerStart(Core *core) {
 
 void toggleLed(Core *core) {
 
-  if (core->mode != MODE_MANUAL) {
-    printf("info: ignoring led toggle in non-manual mode\n");
-    return;
-  }
+//  if (core->mode != MODE_MANUAL) {
+//    printf("info: ignoring led toggle in non-manual mode\n");
+//    return;
+//  }
 
   switch (core->ledMode) {
     case LED_OFF:
@@ -196,10 +193,10 @@ void firingTimerStart(Core *core) {
 
 void beginFiring(Core *core) {
 
-  if (core->mode != MODE_MANUAL) {
-    printf("info: ignoring begin-firing non-manual mode\n");
-    return;
-  }
+//  if (core->mode != MODE_MANUAL) {
+//    printf("info: ignoring begin-firing non-manual mode\n");
+//    return;
+//  }
 
   core->continueFiring = true;
 
@@ -212,19 +209,19 @@ void beginFiring(Core *core) {
 }
 
 void endFiring(Core *core) {
-  if (core->mode != MODE_MANUAL) {
-    printf("info: ignoring end-firing non-manual mode\n");
-    return;
-  }
+//  if (core->mode != MODE_MANUAL) {
+//    printf("info: ignoring end-firing non-manual mode\n");
+//    return;
+//  }
   core->continueFiring = false;
 }
 
 void move(Core *core, Movement m) {
 
-  if (core->mode != MODE_MANUAL) {
-    printf("info: ignoring move in non-manual mode\n");
-    return;
-  }
+//  if (core->mode != MODE_MANUAL) {
+//    printf("info: ignoring move in non-manual mode\n");
+//    return;
+//  }
 
   if (core->continueFiring) {
     printf("info: ignoring move while firing\n");
@@ -256,9 +253,16 @@ void move(Core *core, Movement m) {
 
 void toggleSentryMode(Core *core) {
 
-  if (core->mode != MODE_SENTRY) {
-    printf("info: ignoring toggle-sentry-mode in manual mode\n");
-    return;
+  switch (core->sentryMode) {
+    case SENTRY_MODE_OFF:
+      printf("info: ignoring toggle-sentry-mode when sentry is disabled\n");
+      break;
+    case SENTRY_MODE_PASSIVE:
+      core->sentryMode = SENTRY_MODE_ARMED; // red light is off by default, starts blinking when tracking
+      break;
+    case SENTRY_MODE_ARMED:
+      core->sentryMode = SENTRY_MODE_PASSIVE; // red light is on by default
+      break;
   }
 }
 
@@ -350,19 +354,22 @@ void handleFace(Core *core, FaceEvent e) {
      * another idea: sounds would be fun: https://www.zedge.net/find/ringtones/oblivion
      */
 
-    if (isInside(centerX, centerY, 50, faceCenterX, faceCenterY)) {
-      printf("face centered on cirlce\n");
+    if (isInside(centerX, centerY, CAPTURE_CIRCLE_RADIUS, faceCenterX, faceCenterY)) {
+      printf("face centered on circle\n");
       if (core->moving) {
         launcherSend(core->launcher, LAUNCHER_STOP);
+        core->moving = false;
       }
     }
-    else if (   (centerX > largestFace->x)
+    else if (
+           (centerX > largestFace->x)
         && (centerX < (largestFace->x + largestFace->width))
         && (centerY > largestFace->y)
         && (centerY < (largestFace->y + largestFace->height))) {
       printf("center of screen inside face box\n");
       if (core->moving) {
         launcherSend(core->launcher, LAUNCHER_STOP);
+        core->moving = false;
       }
     }
     else {
@@ -370,14 +377,18 @@ void handleFace(Core *core, FaceEvent e) {
       int xAbs = abs(centerX - faceCenterX);
       int yAbs = abs(centerY - faceCenterY);
 
-      if (xAbs >= yAbs) {
+      printf("x-abs %i, y-abs %i\n", xAbs, yAbs);
+
+      if (xAbs > yAbs) {
         // move horizontally
         if (faceCenterX < centerX) {
           // move left
+          printf("moving left\n");
           launcherSend(core->launcher, LAUNCHER_LEFT);
         }
         else {
           // move right
+          printf("moving right\n");
           launcherSend(core->launcher, LAUNCHER_RIGHT);
         }
       }
@@ -385,24 +396,21 @@ void handleFace(Core *core, FaceEvent e) {
         // move vertically
         if (faceCenterY < centerY) {
           // move up
+          printf("moving up\n");
           launcherSend(core->launcher, LAUNCHER_UP);
         }
         else {
           // move down
+          printf("moving down\n");
           launcherSend(core->launcher, LAUNCHER_DOWN);
         }
       }
+
+      core->moving = true;
     }
 
     core->trackingFace = true;
   }
-
-
-
-  // TODO: write the sentry code
-
-  // TODO: figure out how to continue displaying images with imshow (only works on the main thread)
-  // could just use the main thread (which isn't doing anything) to drive the capture logic
 }
 
 char* controlTypeName(ControlType t) {
@@ -486,23 +494,20 @@ bool send(Core *core, Event e) {
 
 int main() {
 
+  Launcher_t launcher = launcherStart();
+
   Core core;
   coreInit(&core);
-
-  Launcher_t launcher = launcherStart();
-  Controller_t controller = controllerInit(&core);
-//  FaceCapture_t capture = faceCaptureInit(&core);
-
   core.launcher = launcher;
-
-  controllerStart(controller);
   ledTimerStart(&core);
   firingTimerStart(&core);
 
+  Controller_t controller = controllerInit(&core);
+  controllerStart(controller);
+
+//  FaceCapture_t capture = faceCaptureInit(&core);
   Capture_t cap = captureInit();
   CaptureResults results;
-
-//  uint64_t last = now();
 
   while (1) {
     capture(cap, &results);
@@ -518,17 +523,6 @@ int main() {
       e.face.faces[i].height = results.faces[i].height;
     }
     send(&core, e);
-
-//    uint64_t this = now();
-//    printf("cycle: %" PRIu64 "\n", this - last);
-//    last = this;
   }
-
-
-//  faceCaptureStart(capture);
-//
-//  while (true) {
-//    sleep(10);
-//  }
 }
 
