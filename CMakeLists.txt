@@ -19,37 +19,12 @@ find_library(appkit AppKit)
 find_library(usb_lib usb-1.0)
 find_package( OpenCV REQUIRED )
 
-add_executable(thunder thunder.c errors.c)
-target_link_libraries(thunder ${cfnetwork_lib} ${corefoundation_lib} ${iokit})
-
-add_executable(ps4-arrows ps4-arrows.c errors.c)
-target_link_libraries(ps4-arrows ${cfnetwork_lib} ${corefoundation_lib} ${iokit})
-
-add_executable(ps4 ps4.c errors.c)
-target_link_libraries(ps4 ${cfnetwork_lib} ${corefoundation_lib} ${iokit})
-
-add_executable(find find.c errors.c)
-target_link_libraries(find usb-1.0)
-
 set(CMAKE_CXX_STANDARD 11)
-
-add_library(capture capture.cpp)
-target_link_libraries(capture ${OpenCV_LIBS})
 
 add_library(capture-ps3eye ps3eye.cpp capture-ps3eye.cpp)
 target_link_libraries(capture-ps3eye usb-1.0 ${OpenCV_LIBS})
 
-add_executable(cap-1 cap-1.cpp)
-target_link_libraries(cap-1 ${OpenCV_LIBS})
-
-
-add_executable(eye-test ps3eye.cpp eye-test.cpp)
-target_link_libraries(eye-test usb-1.0 ${OpenCV_LIBS})
-
 set(CMAKE_C_STANDARD 11)
-
-add_executable(capture-main capture-main.c)
-target_link_libraries(capture-main capture)
 
 add_executable(core errors.c core.c controller.c launcher.c face-capture.c)
 target_link_libraries(core ${cfnetwork_lib} ${corefoundation_lib} ${iokit} usb-1.0 ${OpenCV_LIBS} capture-ps3eye)
