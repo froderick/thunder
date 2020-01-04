@@ -47,6 +47,7 @@ typedef struct Core {
   pthread_cond_t fireCond;
 
   Launcher_t launcher;
+  Movement movement;
   bool continueFiring; // set by controller inputs, read by fire thread
   uint8_t remainingShots;
   LedMode ledMode;
@@ -63,9 +64,11 @@ typedef struct Core {
 void coreInit(Core *c) {
   pthread_mutex_init(&c->mutex, NULL);
   pthread_cond_init(&c->fireCond, NULL);
+  c->movement = MOVE_NONE;
+  c->continueFiring = false;
   c->remainingShots = FIRING_MAX_CAPACITY;
   c->ledMode = LED_OFF;
-  c->sentryMode = SENTRY_MODE_PASSIVE;
+  c->sentryMode = SENTRY_MODE_OFF;
   c->launcher = NULL;
   c->ledOn = false;
   c->trackingFace = false;
@@ -73,12 +76,28 @@ void coreInit(Core *c) {
 }
 
 void toggleMode(Core *core) {
-  // TODO
+  core->trackingFace = false;
+  core->moving = false;
+
+  if (core->sentryMode == SENTRY_MODE_OFF) {
+    printf("info: sentry mode enabled\n");
+    core->sentryMode = SENTRY_MODE_PASSIVE;
+  }
+  else {
+    printf("info: sentry mode disabled\n");
+    core->sentryMode = SENTRY_MODE_OFF;
+  }
 }
 
 void reloaded(Core *core) {
   printf("info: reloading\n");
   core->remainingShots = FIRING_MAX_CAPACITY;
+  int rt = pthread_cond_signal(&core->fireCond);
+  switch (rt) {
+    case 0:
+      break;
+    case EINVAL: explode("something about the signal is invalid");
+  }
 }
 
 #define LED_BLINK_DURATION 100
@@ -122,11 +141,6 @@ void ledTimerStart(Core *core) {
 
 void toggleLed(Core *core) {
 
-//  if (core->mode != MODE_MANUAL) {
-//    printf("info: ignoring led toggle in non-manual mode\n");
-//    return;
-//  }
-
   switch (core->ledMode) {
     case LED_OFF:
       core->ledMode = LED_ON;
@@ -157,22 +171,46 @@ void* firingTimerFn(void *arg) {
 
   while (true) {
 
-    while (core->continueFiring && core->remainingShots > 0) {
-      printf("firing (remainingShots = %u)\n", core->remainingShots);
-      launcherSend(core->launcher, LAUNCHER_FIRE);
+    if (core->continueFiring) {
+      while (core->continueFiring && core->remainingShots > 0) {
+        printf("firing (remainingShots = %u)\n", core->remainingShots);
+        launcherSend(core->launcher, LAUNCHER_FIRE);
 
-      pthread_mutex_unlock(&core->mutex);
-      msleep(FIRE_DURATION);
-      pthread_mutex_lock(&core->mutex);
+        pthread_mutex_unlock(&core->mutex);
+        msleep(FIRE_DURATION);
+        pthread_mutex_lock(&core->mutex);
 
-      core->remainingShots -= 1;
+        core->remainingShots -= 1;
+      }
+
+      if (core->continueFiring && core->remainingShots == 0) {
+        printf("out of ammo!\n");
+      }
     }
 
-    if (core->continueFiring && core->remainingShots == 0) {
-      printf("out of ammo!\n");
+    LauncherCmd cmd;
+    switch (core->movement) {
+      case MOVE_UP:
+        cmd = LAUNCHER_UP;
+        break;
+      case MOVE_DOWN:
+        cmd = LAUNCHER_DOWN;
+        break;
+      case MOVE_LEFT:
+        cmd = LAUNCHER_LEFT;
+        break;
+      case MOVE_RIGHT:
+        cmd = LAUNCHER_RIGHT;
+        break;
+      case MOVE_NONE:
+        cmd  = LAUNCHER_STOP;
+        break;
+      default:
+      explode("unknown movement: %u\n", core->movement)
     }
+    launcherSend(core->launcher, cmd);
 
-    printf("waiting for signal to start firing\n");
+    printf("waiting for signal to fire or move\n");
     int rt = pthread_cond_wait(&core->fireCond, &core->mutex);
     switch (rt) {
       case 0:
@@ -192,14 +230,7 @@ void firingTimerStart(Core *core) {
 }
 
 void beginFiring(Core *core) {
-
-//  if (core->mode != MODE_MANUAL) {
-//    printf("info: ignoring begin-firing non-manual mode\n");
-//    return;
-//  }
-
   core->continueFiring = true;
-
   int rt = pthread_cond_signal(&core->fireCond);
   switch (rt) {
     case 0:
@@ -209,46 +240,17 @@ void beginFiring(Core *core) {
 }
 
 void endFiring(Core *core) {
-//  if (core->mode != MODE_MANUAL) {
-//    printf("info: ignoring end-firing non-manual mode\n");
-//    return;
-//  }
   core->continueFiring = false;
 }
 
 void move(Core *core, Movement m) {
-
-//  if (core->mode != MODE_MANUAL) {
-//    printf("info: ignoring move in non-manual mode\n");
-//    return;
-//  }
-
-  if (core->continueFiring) {
-    printf("info: ignoring move while firing\n");
-    return;
+  core->movement = m;
+  int rt = pthread_cond_signal(&core->fireCond);
+  switch (rt) {
+    case 0:
+      break;
+    case EINVAL: explode("something about the signal is invalid");
   }
-
-  LauncherCmd cmd;
-  switch (m) {
-    case MOVE_UP:
-      cmd = LAUNCHER_UP;
-      break;
-    case MOVE_DOWN:
-      cmd = LAUNCHER_DOWN;
-      break;
-    case MOVE_LEFT:
-      cmd = LAUNCHER_LEFT;
-      break;
-    case MOVE_RIGHT:
-      cmd = LAUNCHER_RIGHT;
-      break;
-    case MOVE_NONE:
-      cmd  = LAUNCHER_STOP;
-      break;
-    default:
-      explode("unknown movement: %u\n", m)
-  }
-  launcherSend(core->launcher, cmd);
 }
 
 void toggleSentryMode(Core *core) {
@@ -259,9 +261,11 @@ void toggleSentryMode(Core *core) {
       break;
     case SENTRY_MODE_PASSIVE:
       core->sentryMode = SENTRY_MODE_ARMED; // red light is off by default, starts blinking when tracking
+      printf("sentry: armed mode enabled\n");
       break;
     case SENTRY_MODE_ARMED:
       core->sentryMode = SENTRY_MODE_PASSIVE; // red light is on by default
+      printf("sentry: passive mode enabled\n");
       break;
   }
 }
@@ -307,10 +311,14 @@ bool isInside(int circle_x, int circle_y, int rad, int x, int y) {
 
 void handleFace(Core *core, FaceEvent e) {
 
+  if (!core->sentryMode) {
+    return;
+  }
+
   if (e.numFaces == 0) {
     if (core->trackingFace) {
       // nothing to track now
-      launcherSend(core->launcher, LAUNCHER_STOP);
+      move(core, MOVE_NONE);
       core->trackingFace = false;
       core->moving = false;
     }
@@ -354,11 +362,17 @@ void handleFace(Core *core, FaceEvent e) {
      * another idea: sounds would be fun: https://www.zedge.net/find/ringtones/oblivion
      */
 
+    // TODO: if we don't want to interrupt the firing procedure with movement, then all movement should happen on the
+    //       firing thread also?
+
     if (isInside(centerX, centerY, CAPTURE_CIRCLE_RADIUS, faceCenterX, faceCenterY)) {
-      printf("face centered on circle\n");
+      printf("sentry: face centered on circle\n");
       if (core->moving) {
-        launcherSend(core->launcher, LAUNCHER_STOP);
+        move(core, MOVE_NONE);
         core->moving = false;
+        if (core->sentryMode == SENTRY_MODE_ARMED) {
+          beginFiring(core);
+        }
       }
     }
     else if (
@@ -366,43 +380,48 @@ void handleFace(Core *core, FaceEvent e) {
         && (centerX < (largestFace->x + largestFace->width))
         && (centerY > largestFace->y)
         && (centerY < (largestFace->y + largestFace->height))) {
-      printf("center of screen inside face box\n");
+      printf("sentry: center of screen inside face box\n");
       if (core->moving) {
-        launcherSend(core->launcher, LAUNCHER_STOP);
+        move(core, MOVE_NONE);
         core->moving = false;
+        if (core->sentryMode == SENTRY_MODE_ARMED) {
+          printf("sentry: firing\n");
+          beginFiring(core);
+        }
       }
     }
     else {
+      endFiring(core);
 
       int xAbs = abs(centerX - faceCenterX);
       int yAbs = abs(centerY - faceCenterY);
 
-      printf("x-abs %i, y-abs %i\n", xAbs, yAbs);
+      printf("sentry: x-abs %i, y-abs %i\n", xAbs, yAbs);
 
-      if (xAbs > yAbs) {
+      if (xAbs > 20 || xAbs > yAbs) {
         // move horizontally
         if (faceCenterX < centerX) {
           // move left
-          printf("moving left\n");
-          launcherSend(core->launcher, LAUNCHER_LEFT);
+          printf("sentry: moving left\n");
+          move(core, MOVE_LEFT);
         }
         else {
           // move right
-          printf("moving right\n");
-          launcherSend(core->launcher, LAUNCHER_RIGHT);
+          printf("sentry: moving right\n");
+          move(core, MOVE_RIGHT);
         }
       }
       else {
         // move vertically
         if (faceCenterY < centerY) {
           // move up
-          printf("moving up\n");
-          launcherSend(core->launcher, LAUNCHER_UP);
+          printf("sentry: moving up\n");
+          move(core, MOVE_UP);
         }
         else {
           // move down
-          printf("moving down\n");
-          launcherSend(core->launcher, LAUNCHER_DOWN);
+          printf("sentry: moving down\n");
+          move(core, MOVE_DOWN);
         }
       }
 
