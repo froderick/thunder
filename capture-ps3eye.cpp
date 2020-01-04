@@ -40,7 +40,7 @@ Capture* captureInit() {
   c->device->start();
 
   // BGR: destination buffer must be width * height bytes * 3
-  size_t bufSize = CAPTURE_WIDTH * CAPTURE_HEIGHT * sizeof(uint8_t); c->device->getOutputBytesPerPixel();
+  size_t bufSize = CAPTURE_WIDTH * CAPTURE_HEIGHT * sizeof(uint8_t) * c->device->getOutputBytesPerPixel();
   c->buf = (uint8_t*)malloc(bufSize);
   c->bgr = new Mat(CAPTURE_HEIGHT, CAPTURE_WIDTH, CV_8UC3, c->buf);
 
