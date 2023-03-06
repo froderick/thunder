@@ -1,12 +1,10 @@
 # thunder
 
-An image of what this might become:
-
-https://www.lucidchart.com/documents/view/e6b09b75-3998-4206-8caa-7c4b6ea134c8#
+A c program that drives a usb missle launcher with manual and sentry (automated) control modes. The manual mode can be driven with a PS4 controller, and the automated mode relies on a usb webcam and opencv to track and recognize faces it should attack.
 
 ## Design
 
-This is a c program that drives a usb missle launcher with manual and sentry (automated) control modes. The manual mode can be driven with a PS4 controller, and the automated mode relies on a usb webcam and opencv to track and recognize faces it should attack.
+I sketched some initial ideas [here](https://www.lucidchart.com/documents/view/e6b09b75-3998-4206-8caa-7c4b6ea134c8#).
 
 Inputs:
 - controller (mode, manual controls, reload-notify)
@@ -60,10 +58,6 @@ Its worth noting that this is written in c++ and is actually its own separately-
 #### main.c
 
 Wires up `launcher`, `controller` `camera` and `core`, this is the entry point for the entire app. Handles command-line options, etc.
-
-## Usage
-
-FIXME
 
 ## License
 
