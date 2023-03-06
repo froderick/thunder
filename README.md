@@ -1,5 +1,7 @@
 # thunder
 
+![img](https://d3gqasl9vmjfd8.cloudfront.net/a5b6511c-a539-48c0-881b-6e3d2adcadec.jpg)
+
 A c program that drives a usb missle launcher with manual and sentry (automated) control modes. The manual mode can be driven with a PS4 controller, and the automated mode relies on a usb webcam and opencv to track and recognize faces it should attack.
 
 ## Design
