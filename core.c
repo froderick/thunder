@@ -15,17 +15,17 @@
 #include "capture.h"
 #include "sound.h"
 
-#define SOUND_SENTRY_OFF         "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-off.mp3"
-#define SOUND_SENTRY_PASSIVE     "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-passive.mp3"
-#define SOUND_SENTRY_ARMED       "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry-armed.mp3"
-#define SOUND_RELOAD             "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/reload.mp3"
-#define SOUND_NO_AMMO            "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/no-ammo.mp3"
+#define SOUND_SENTRY_OFF         "sound/sentry-off.mp3"
+#define SOUND_SENTRY_PASSIVE     "sound/sentry-passive.mp3"
+#define SOUND_SENTRY_ARMED       "sound/sentry-armed.mp3"
+#define SOUND_RELOAD             "sound/reload.mp3"
+#define SOUND_NO_AMMO            "sound/no-ammo.mp3"
 
-#define SOUND_TRACKING           "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry_tracking.mp3"
-#define SOUND_SENTRY_DEACTIVATED "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/sentry_deactivated.mp3"
-#define SOUND_6 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone.mp3"
-#define SOUND_7 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_2.mp3"
-#define SOUND_8 "/Users/ddcmhenry/dev/funtastic/branches/thunder/sound/drone_3.mp3"
+#define SOUND_TRACKING           "sound/sentry_tracking.mp3"
+#define SOUND_SENTRY_DEACTIVATED "sound/sentry_deactivated.mp3"
+#define SOUND_6                  "sound/drone.mp3"
+#define SOUND_7                  "sound/drone_2.mp3"
+#define SOUND_8                  "sound/drone_3.mp3"
 
 void msleep(uint64_t ms) {
   usleep(ms * 1000);
@@ -590,7 +590,6 @@ bool send(Core *core, Event e) {
 
 int main() {
 
-
   Launcher_t launcher = launcherStart();
 
   Core core;
@@ -604,7 +603,6 @@ int main() {
   Controller_t controller = controllerInit(&core);
   controllerStart(controller);
 
-//  FaceCapture_t capture = faceCaptureInit(&core);
   Capture_t cap = captureInit();
   CaptureResults results;
 

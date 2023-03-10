@@ -2,7 +2,66 @@
 
 ![img](https://d3gqasl9vmjfd8.cloudfront.net/a5b6511c-a539-48c0-881b-6e3d2adcadec.jpg)
 
-A c program that drives a usb missle launcher with manual and sentry (automated) control modes. The manual mode can be driven with a PS4 controller, and the automated mode relies on a usb webcam and opencv to track and recognize faces it should attack.
+A c program that drives a usb missle launcher with manual and sentry (automated) control modes. The manual mode can be driven with a PS4 controller, and the automated mode relies on a usb webcam and opencv to track and recognize faces it should attack. There are fun robot sound effects, it is a blast at a party.
+
+## Getting Started
+
+This project depends on MacOS. It also requires a DreamCheeky Thunder, a PSEye camera taped to the top of it, and a PS4 controller. :)
+
+First, install opencv.
+```bash
+brew install opencv
+```
+
+Then, build with cmake.
+
+```bash
+$ cmake .
+-- Found OpenCV: /usr/local/Cellar/opencv/4.7.0_2 (found version "4.7.0")
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /Users/michaelhenry/dev/funtastic/branches/thunder
+
+$ make
+[  7%] Building CXX object CMakeFiles/capture-ps3eye.dir/ps3eye.cpp.o
+[ 15%] Building CXX object CMakeFiles/capture-ps3eye.dir/capture-ps3eye.cpp.o
+[ 23%] Linking CXX static library libcapture-ps3eye.a
+[ 23%] Built target capture-ps3eye
+[ 30%] Building C object CMakeFiles/sound.dir/sound.m.o
+[ 38%] Linking C static library libsound.a
+[ 38%] Built target sound
+[ 46%] Building C object CMakeFiles/core.dir/errors.c.o
+[ 53%] Building C object CMakeFiles/core.dir/core.c.o
+[ 61%] Building C object CMakeFiles/core.dir/controller.c.o
+[ 69%] Building C object CMakeFiles/core.dir/launcher.c.o
+[ 76%] Building C object CMakeFiles/core.dir/face-capture.c.o
+[ 84%] Linking CXX executable core
+[ 84%] Built target core
+[ 92%] Building C object CMakeFiles/test.dir/test.m.o
+[100%] Linking C executable test
+[100%] Built target test
+```
+
+Connect the Thunder to your Mac via USB, and connect the PS4 controller. Then, run the `core` binary from the root of the git repo. The program will detect the devices automatically (assuming there aren't more than one of each type of device plugged in). Turn up the sound, so you can hear the sound effects. 
+
+## Usage
+
+This program supports three operating modes:
+
+1. Manual Mode - you can use the dpad to aim the Thunder and the X button to fire. You can fire single shots, or hold down the fire button to fire continuously until all the arrows have been spent. R1 informs `thunder` that the arrows have been reloaded, allowing it to fire again.
+
+2. Sentry Mode - the face-tracking is used to identify and track targets by moving the Thunder automatically. There are sound effects to indicate when a target is identified and lost. The red light on the thunder is on by default, and blinks when tracking.
+
+3. Armed Sentry Mode - the Thunder will track and automatically fire on targets that are identified and tracked until it runds out of arrows. The red light is off by default, but blinks when tracking.
+
+### Controls
+
+* dpad - moves the Thunder up/down, left/right
+* cross - fire
+* square - toggles Thunder led on and off
+* triangle - toggles between manual and sentry mode
+* circle - arms/disarms sentry mode
+* r1 - tells the program the Thunder has been reloaded
 
 ## Design
 
