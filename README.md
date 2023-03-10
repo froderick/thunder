@@ -48,7 +48,7 @@ Connect the Thunder to your Mac via USB, and connect the PS4 controller. Then, r
 
 This program supports three operating modes:
 
-1. Manual Mode - you can use the dpad to aim the Thunder and the X button to fire. You can fire single shots, or hold down the fire button to fire continuously until all the arrows have been spent. R1 informs `thunder` that the arrows have been reloaded, allowing it to fire again.
+1. Manual Mode - you can use the dpad to aim the Thunder and the X button to fire. You can fire single shots, or hold down the fire button to fire continuously until all the arrows have been spent. R1 informs the program that the arrows have been reloaded, allowing it to fire again.
 
 2. Sentry Mode - the face-tracking is used to identify and track targets by moving the Thunder automatically. There are sound effects to indicate when a target is identified and lost. The red light on the thunder is on by default, and blinks when tracking.
 
